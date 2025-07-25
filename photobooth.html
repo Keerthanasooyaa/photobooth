@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>My PhotoBooth</title>
+  <style>
+    body {
+      background: black;
+      font-family: 'Outfit', sans-serif;
+      text-align: center;
+      padding: 20px;
+      color: #222;
+    }
+    h1 {
+      font-size: 2.5em;
+      color: white;
+      font-weight: bold;
+    }
+    video, canvas {
+      border: 4px solid #000;
+      margin: 10px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.7);
+    }
+    .strip {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 20px;
+      padding: 10px;
+      background: #000;
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.8);
+      width: fit-content;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .strip canvas {
+      margin-bottom: 10px;
+      border: 4px solid #fff;
+      background-color: #fff;
+      filter: grayscale(90%) contrast(1.1);
+    }
+    button {
+      background-color: #222;
+      border: 1px solid #444;
+      color: white;
+      padding: 10px 20px;
+      font-size: 16px;
+      margin: 10px;
+      cursor: pointer;
+      border-radius: 6px;
+      box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
+      transition: background 0.3s;
+    }
+    button:hover {
+      background-color: #000;
+    }
+    input[type="text"] {
+      padding: 8px;
+      border-radius: 5px;
+      border: 1px solid #aaa;
+      font-family: 'Outfit', sans-serif;
+      width: 250px;
+    }
+    #final-strip {
+      margin-top: 30px;
+      padding: 20px;
+      background-color: #fff;
+      border: 2px solid #000;
+      border-radius: 10px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+      display: inline-block;
+    }
+    .error {
+      color: red;
+      font-size: 1em;
+      margin-top: 10px;
+    }
+    #countdown {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 5em;
+      color: black;
+      text-shadow: 2px 2px white;
+      z-index: 10;
+      display: none;
+    }
+    #flash {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: white;
+      opacity: 0;
+      z-index: 9999;
+      pointer-events: none;
+    }
+    .download-link {
+      display: block;
+      margin-top: 15px;
+      color: #000;
+      font-weight: bold;
+      text-decoration: none;
+    }
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <h1>My PhotoBooth</h1>
+  <video id="video" width="320" height="240" autoplay muted playsinline></video>
+  <div id="countdown">3</div>
+  <div id="flash"></div>
+  <br>
+  <button id="start">Start Photo Strip</button>
+  <div class="strip" id="photo-strip"></div>
+  <div>
+    <input type="text" id="note" placeholder="Add a message...">
+    <button onclick="generateStrip()">Generate Final Strip</button>
+  </div>
+  <div id="final-strip"></div>
+  <div class="error" id="error-msg"></div>
+
+  <audio id="snapSound" preload="auto">
+    <source src="https://www.soundjay.com/mechanical/camera-shutter-click-01.mp3" type="audio/mpeg">
+  </audio>
+
+  <script>
+    const video = document.getElementById('video');
+    const strip = document.getElementById('photo-strip');
+    const finalStrip = document.getElementById('final-strip');
+    const noteInput = document.getElementById('note');
+    const errorMsg = document.getElementById('error-msg');
+    const countdown = document.getElementById('countdown');
+    const flash = document.getElementById('flash');
+    const snapSound = document.getElementById('snapSound');
+
+    async function setupCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+      } catch (err) {
+        errorMsg.textContent = 'Camera error: Please allow access to your webcam in your browser settings or check if another app is using the camera.';
+        console.error('Camera error:', err);
+      }
+    }
+
+    setupCamera();
+
+    async function showCountdown(seconds) {
+      countdown.style.display = 'block';
+      for (let i = seconds; i > 0; i--) {
+        countdown.textContent = i;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      countdown.style.display = 'none';
+    }
+
+    function triggerFlash() {
+      flash.style.transition = 'none';
+      flash.style.opacity = 1;
+      requestAnimationFrame(() => {
+        flash.style.transition = 'opacity 0.5s';
+        flash.style.opacity = 0;
+      });
+    }
+
+    document.getElementById('start').addEventListener('click', async () => {
+      if (!video.srcObject) {
+        errorMsg.textContent = 'Cannot start photostrip without camera access.';
+        return;
+      }
+      strip.innerHTML = '';
+      for (let i = 0; i < 3; i++) {
+        await showCountdown(3);
+        triggerFlash();
+        snapSound.currentTime = 0;
+        snapSound.play();
+        let canvas = document.createElement('canvas');
+        canvas.width = 320;
+        canvas.height = 240;
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        strip.appendChild(canvas);
+      }
+    });
+
+    function generateStrip() {
+      const canvases = strip.querySelectorAll('canvas');
+      if (canvases.length < 3) {
+        alert('Take 3 photos first!');
+        return;
+      }
+
+      const combinedCanvas = document.createElement('canvas');
+      const width = 320;
+      const height = 240 * 3 + 70;
+      combinedCanvas.width = width;
+      combinedCanvas.height = height;
+      const ctx = combinedCanvas.getContext('2d');
+
+      // Apply grayscale effect to each photo
+      canvases.forEach((c, i) => {
+        ctx.filter = 'grayscale(100%)';
+        ctx.drawImage(c, 0, i * 240);
+      });
+      ctx.filter = 'none'; // Reset filter
+
+      // Add text note and watermark
+      ctx.fillStyle = '#000';
+      ctx.font = 'italic 16px Outfit';
+      ctx.fillText(noteInput.value || 'My Photo Strip', 10, height - 40);
+      ctx.fillText('© keerthana.ai', 10, height - 20);
+
+      finalStrip.innerHTML = '';
+      finalStrip.appendChild(combinedCanvas);
+
+      const link = document.createElement('a');
+      link.href = combinedCanvas.toDataURL();
+      link.download = 'photostrip.png';
+      link.innerText = 'Download Photo Strip';
+      link.className = 'download-link';
+      finalStrip.appendChild(link);
+    }
+  </script>
+</body>
+</html>
